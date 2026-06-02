@@ -2,6 +2,7 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
+from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 from statsmodels.tsa.stattools import adfuller
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.stats.diagnostic import acorr_ljungbox, het_arch
@@ -137,7 +138,6 @@ with open(DATA_OUTPUTS_PATH / "garch_summaries.txt", "w") as f:
                 "t_stat": result.tvalues[param_name],
                 "p_value": result.pvalues[param_name],
             })
-
         conditional_volatility = result.conditional_volatility
         standardized_residuals = result.std_resid
 
@@ -232,4 +232,37 @@ for index in indices:
     ax.set_title(f"GARCH Conditional vs Realized Volatility for {index}")
     format_date_axis(ax)
     plt.savefig(PLOTS_OUTPUTS_PATH / f"{index}_garch_volatility_plot.png")
+    plt.close(fig)
+
+persistence_table = garch_params.pivot(
+    index="index",
+    columns="parameter",
+    values="estimate",
+).reset_index()
+
+persistence_table = persistence_table[["index", "omega", "alpha[1]", "beta[1]"]]
+persistence_table["alpha_beta"] = persistence_table["alpha[1]"] + persistence_table["beta[1]"]
+persistence_table = persistence_table.sort_values("alpha_beta", ascending=False)
+persistence_table.to_csv(DATA_OUTPUTS_PATH / "garch_persistence_table.csv", index=False)
+
+for index in indices:
+    z_t = garch_std_residuals.loc[garch_std_residuals["index"] == index, "standardized_residuals"].dropna()
+    z_t_squared = z_t ** 2
+
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+
+    plot_acf(z_t, lags=20, ax=axes[0, 0])
+    axes[0, 0].set_title(f"ACF of Standardized Residuals for {index}")
+
+    plot_pacf(z_t, lags=20, ax=axes[0, 1], method="ywm")
+    axes[0, 1].set_title(f"PACF of Standardized Residuals for {index}")
+
+    plot_acf(z_t_squared, lags=20, ax=axes[1, 0])
+    axes[1, 0].set_title(f"ACF of Squared Standardized Residuals for {index}")
+
+    plot_pacf(z_t_squared, lags=20, ax=axes[1, 1], method="ywm")
+    axes[1, 1].set_title(f"PACF of Squared Standardized Residuals for {index}")
+
+    fig.tight_layout()
+    plt.savefig(PLOTS_OUTPUTS_PATH / f"{index}_garch_residual_acf_pacf.png")
     plt.close(fig)
