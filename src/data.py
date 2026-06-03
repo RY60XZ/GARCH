@@ -17,7 +17,7 @@ indices = [
 ]
 
 #we choose 2007-04-01 as the starting date because yfinance's ^STOXX50E data is missing before the date
-df = yf.download(tickers=indices, start="2007-04-01", interval="1d")["Close"]
+df = yf.download(tickers=indices, start="2007-04-01", end="2026-06-01", interval="1d")["Close"]
 df.to_csv(RAW_DATA_PATH / "data.csv")
 
 
