@@ -96,6 +96,7 @@ garch_params = []
 garch_diagnostics = []
 garch_volatility_rows = []
 garch_std_residual_rows = []
+garch_forecast_rows = []
 
 rolling_21 = log_returns[indices].rolling(window=21).std() * np.sqrt(252)
 rolling_63 = log_returns[indices].rolling(window=63).std() * np.sqrt(252)
@@ -159,6 +160,24 @@ with open(DATA_OUTPUTS_PATH / "garch_summaries.txt", "w") as f:
                 "model": model_name,
                 "standardized_residuals": standardized_residuals.loc[row_index],
             })
+        forecast_duration = 21
+        forecast = result.forecast(horizon=forecast_duration, reindex=False)
+        forecast_mean = forecast.mean.iloc[-1]
+        forecast_variance = forecast.variance.iloc[-1]
+        last_date = log_returns["Date"].iloc[-1]
+        forecast_dates = pd.bdate_range(start=last_date + pd.offsets.BDay(1), periods=forecast_duration)
+        for h in range(1, forecast_duration+1):
+            h_index = f"h.{h:02d}"
+            garch_forecast_rows.append({
+                "Date": forecast_dates[h-1],
+                "index": index,
+                "model": model_name,
+                "h": h,
+                "forecast_mean": forecast_mean.loc[h_index],
+                "forecast_variance": forecast_variance.loc[h_index],
+                "forecast_volatility": np.sqrt(forecast_variance.loc[h_index]),
+                "annualized_forecast_volatility": np.sqrt(forecast_variance.loc[h_index]) * np.sqrt(252),
+            })
 
         standardized_residuals.dropna(inplace=True)
         lb_std_resid = acorr_ljungbox(standardized_residuals, lags=[10, 20], return_df = True)
@@ -193,12 +212,14 @@ garch_params = pd.DataFrame(garch_params)
 garch_diagnostics = pd.DataFrame(garch_diagnostics)
 garch_volatility = pd.DataFrame(garch_volatility_rows)
 garch_std_residuals = pd.DataFrame(garch_std_residual_rows)
+garch_forecast = pd.DataFrame(garch_forecast_rows)
 
 garch_model_results.to_csv(DATA_OUTPUTS_PATH / "garch_model_results.csv", index=False)
 garch_params.to_csv(DATA_OUTPUTS_PATH / "garch_params.csv", index=False)
 garch_diagnostics.to_csv(DATA_OUTPUTS_PATH / "garch_diagnostics.csv", index=False)
 garch_volatility.to_csv(DATA_OUTPUTS_PATH / "garch_conditional_volatility.csv", index=False)
 garch_std_residuals.to_csv(DATA_OUTPUTS_PATH / "garch_standardized_residuals.csv", index=False)
+garch_forecast.to_csv(DATA_OUTPUTS_PATH / "garch_forecast.csv", index=False)
 
 for index in indices:
     index_volatility = garch_volatility.loc[garch_volatility["index"] == index]
@@ -265,4 +286,35 @@ for index in indices:
 
     fig.tight_layout()
     plt.savefig(PLOTS_OUTPUTS_PATH / f"{index}_garch_residual_acf_pacf.png")
+    plt.close(fig)
+
+for index in indices:
+    historical_volatility = garch_volatility.loc[(garch_volatility["index"] == index) & (garch_volatility["Date"] >= pd.Timestamp(2021, 1, 1) )]
+
+    forecast_volatility = garch_forecast.loc[garch_forecast["index"] == index]
+
+    fig, ax = plt.subplots(figsize=(12, 8))
+
+    sns.lineplot(
+        data=historical_volatility,
+        x="Date",
+        y="annualized_conditional_volatility",
+        ax=ax,
+        label="Historical conditional volatility",
+    )
+
+    sns.lineplot(
+        data=forecast_volatility,
+        x="Date",
+        y="annualized_forecast_volatility",
+        ax=ax,
+        label=f"{forecast_duration}-day forecast",
+    )
+
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Annualized Volatility (%)")
+    ax.set_title(f"GARCH Conditional Volatility Forecast for {index}")
+    format_date_axis(ax)
+
+    plt.savefig(PLOTS_OUTPUTS_PATH / f"{index}_volatility_forecast_plot.png")
     plt.close(fig)
