@@ -9,6 +9,8 @@ from statsmodels.stats.diagnostic import acorr_ljungbox, het_arch
 from arch import arch_model
 import matplotlib.dates as mdates
 import seaborn as sns
+from scipy.stats import t, chi2
+from scipy.special import xlogy
 
 ROOT = Path(__file__).resolve().parent.parent
 PROCESSED_DATA_PATH = ROOT / "data" / "processed"
@@ -317,4 +319,115 @@ for index in indices:
     format_date_axis(ax)
 
     plt.savefig(PLOTS_OUTPUTS_PATH / f"{index}_volatility_forecast_plot.png")
+    plt.close(fig)
+
+var_results = []
+var_series_rows = []
+alpha = 0.01
+train_fraction = 0.8
+
+for index in indices:
+    series = log_returns[index]
+    split = int(len(series) * train_fraction)
+    model = arch_model(
+        series,
+        mean="AR",
+        lags=1,
+        vol="GARCH",
+        p=1,
+        q=1,
+        dist="t",
+    )
+    result = model.fit(last_obs=split, disp=False)
+    forecast = result.forecast(
+        horizon=1,
+        start=split,
+        reindex=True,
+        align="target",
+    )
+
+    forecast_mean = forecast.mean["h.1"].dropna()
+    forecast_variance = forecast.variance["h.1"].dropna()
+    forecast_volatility = np.sqrt(forecast_variance)
+
+    common_index = forecast_mean.index.intersection(series.index)
+
+    actual_returns = series.loc[common_index]
+    forecast_mean = forecast_mean.loc[common_index]
+    forecast_volatility = forecast_volatility.loc[common_index]
+
+    nu = result.params["nu"]
+    t_quantile = t.ppf(alpha, df=nu) * np.sqrt((nu - 2) / nu)
+    var_99 = forecast_mean + forecast_volatility * t_quantile
+    exceedances = actual_returns < var_99
+    n = len(exceedances)
+    x = exceedances.sum()
+    expected = alpha * n
+    p_hat = x/n
+
+    #kupiec test
+    log_l_null = xlogy(x, alpha) + xlogy(n - x, 1-alpha)
+    log_l_alt = xlogy(x, p_hat) + xlogy(n - x, 1-p_hat)
+    kupiec_lr = -2 * (log_l_null - log_l_alt)
+    kupiec_pvalue = chi2.sf(kupiec_lr, df=1)
+
+    var_results.append({
+        "index": index,
+        "model": model_name,
+        "var_level": "99%",
+        "observations": n,
+        "exceedances": x,
+        "expected_exceedances": expected,
+        "exceedance_rate": p_hat,
+        "kupiec_lr": kupiec_lr,
+        "kupiec_pvalue": kupiec_pvalue,
+    })
+
+    for row_index in common_index:
+        var_series_rows.append({
+            "index": index,
+            "Date": log_returns.loc[row_index, "Date"],
+            "actual_return": actual_returns.loc[row_index],
+            "var_99": var_99.loc[row_index],
+            "exceedances": exceedances.loc[row_index],
+        })
+
+var_results = pd.DataFrame(var_results)
+var_series = pd.DataFrame(var_series_rows)
+var_results.to_csv(DATA_OUTPUTS_PATH / "var_results.csv", index=False)
+var_series.to_csv(DATA_OUTPUTS_PATH / "var_series.csv", index=False)
+
+for index in indices:
+    series = var_series[var_series["index"]== index]
+    fig, ax = plt.subplots(figsize=(12, 8))
+    sns.lineplot(
+        data = series,
+        x="Date",
+        y="actual_return",
+        ax=ax,
+        label = "actual return"
+    )
+    sns.lineplot(
+        data = series,
+        x="Date",
+        y="var_99",
+        ax=ax,
+        color = "crimson",
+        label = "99% VaR"
+    )
+    exceedance_days = series[series["exceedances"] == True]
+    sns.scatterplot(
+        data=exceedance_days,
+        x="Date",
+        y="actual_return",
+        ax=ax,
+        color="black",
+        label="VaR exceedance",
+    )
+
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Return / VaR")
+    ax.set_title(f"99% VaR Backtest for {index}")
+    format_date_axis(ax)
+    plt.savefig(PLOTS_OUTPUTS_PATH / f"{index}_var_backtest_plot.png")
     plt.close(fig)
