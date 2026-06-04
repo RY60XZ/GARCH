@@ -223,6 +223,81 @@ garch_volatility.to_csv(DATA_OUTPUTS_PATH / "garch_conditional_volatility.csv", 
 garch_std_residuals.to_csv(DATA_OUTPUTS_PATH / "garch_standardized_residuals.csv", index=False)
 garch_forecast.to_csv(DATA_OUTPUTS_PATH / "garch_forecast.csv", index=False)
 
+# GARCH(2,2) robustness check
+garch_22_model_results = []
+garch_22_params = []
+garch_22_diagnostics = []
+
+for index in indices:
+    model_name = "AR(1)-GARCH(2,2)-t"
+    series = log_returns[index]
+    model = arch_model(
+        series,
+        mean="AR",
+        lags=1,
+        vol="GARCH",
+        p=2,
+        q=2,
+        dist="t",
+    )
+    result = model.fit(disp="off")
+
+    garch_22_model_results.append({
+        "index": index,
+        "model": model_name,
+        "log_likelihood": result.loglikelihood,
+        "AIC": result.aic,
+        "BIC": result.bic,
+    })
+
+    for param_name in result.params.index:
+        garch_22_params.append({
+            "index": index,
+            "model": model_name,
+            "parameter": param_name,
+            "estimate": result.params[param_name],
+            "std_error": result.std_err[param_name],
+            "t_stat": result.tvalues[param_name],
+            "p_value": result.pvalues[param_name],
+        })
+
+    standardized_residuals = result.std_resid.dropna()
+    lb_std_resid = acorr_ljungbox(standardized_residuals, lags=[10, 20], return_df=True)
+    lb_std_resid_squared = acorr_ljungbox(standardized_residuals ** 2, lags=[10, 20], return_df=True)
+
+    for lag, row in lb_std_resid.iterrows():
+        garch_22_diagnostics.append({
+            "index": index,
+            "model": model_name,
+            "test": "lb_std_resid",
+            "lag": lag,
+            "stat": row["lb_stat"],
+            "p_value": row["lb_pvalue"],
+        })
+
+    for lag, row in lb_std_resid_squared.iterrows():
+        garch_22_diagnostics.append({
+            "index": index,
+            "model": model_name,
+            "test": "lb_std_resid_squared",
+            "lag": lag,
+            "stat": row["lb_stat"],
+            "p_value": row["lb_pvalue"],
+        })
+
+garch_22_model_results = pd.DataFrame(garch_22_model_results)
+garch_22_params = pd.DataFrame(garch_22_params)
+garch_22_diagnostics = pd.DataFrame(garch_22_diagnostics)
+garch_model_comparison = pd.concat(
+    [garch_model_results, garch_22_model_results],
+    ignore_index=True,
+)
+
+garch_22_model_results.to_csv(DATA_OUTPUTS_PATH / "garch_22_model_results.csv", index=False)
+garch_22_params.to_csv(DATA_OUTPUTS_PATH / "garch_22_params.csv", index=False)
+garch_22_diagnostics.to_csv(DATA_OUTPUTS_PATH / "garch_22_diagnostics.csv", index=False)
+garch_model_comparison.to_csv(DATA_OUTPUTS_PATH / "garch_model_comparison.csv", index=False)
+
 for index in indices:
     index_volatility = garch_volatility.loc[garch_volatility["index"] == index]
     fig, ax = plt.subplots(figsize=(12, 8))
@@ -327,6 +402,7 @@ alpha = 0.01
 train_fraction = 0.8
 
 for index in indices:
+    model_name = "AR(1)-GARCH(1,1)-t"
     series = log_returns[index]
     split = int(len(series) * train_fraction)
     model = arch_model(

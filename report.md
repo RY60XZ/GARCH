@@ -1,10 +1,14 @@
 # Volatility Modeling and Risk Forecasting with GARCH
 
-## 1. Introduction
-This project analyzes volatility in S&P 500, Euro Stoxx 50, Nikkei 225, and FTSE 100. It uses daily closing prices from Yahoo Finance to compute log returns, examine volatility clustering through EDA, and perform preliminary analysis that motivates GARCH modeling. The project then estimates AR(1)-GARCH(1,1) models with Student-t innovations to model conditional volatility, generate volatility forecasts, and evaluate 99% Value-at-Risk performance through an out-of-sample backtest.
+## 1. Introduction & Summary
+This project analyzes volatility in the S&P 500, Euro Stoxx 50, Nikkei 225, and FTSE 100. It uses daily closing prices from Yahoo Finance to compute log returns, examine volatility clustering through EDA, and perform preliminary analysis that motivates GARCH modeling. The project then estimates AR(1)-GARCH(1,1) models with Student-t innovations to model conditional volatility, generate volatility forecasts, and evaluate 99% Value-at-Risk performance through an out-of-sample backtest.
+
+The results show that volatility is highly persistent across all four indices. The S&P 500 has the highest estimated persistence, with alpha[1] + beta[1] = 0.9993, suggesting near-integrated volatility dynamics. This may be attributed to the highly developed nature of U.S. financial markets, where a wide range of derivatives can contribute to leverage effects and contagion, leading to more persistent shocks.
+
+As a robustness check, I also compared the baseline AR(1)-GARCH(1,1)-t model with an AR(1)-GARCH(2,2)-t model. Although GARCH(2,2) slightly improves the AIC for the S&P 500, the BIC favors the simpler GARCH(1,1) specification for all four indices, and the residual diagnostics do not materially improve. Therefore, the AR(1)-GARCH(1,1)-t model is used as the preferred model.
 
 ## 2. Data
-The data are obtained from Yahoo Finance using the yfinance package and include the daily closing prices of S&P 500, Euro Stoxx 50, Nikkei 225, and FTSE 100 between 2007-04-01 and 2026-04-01.
+The data are obtained from Yahoo Finance using the yfinance package and include daily closing prices from 2007-04-01 through 2026-06-01.
 
 ## 3. Exploratory Data Analysis
 
@@ -90,7 +94,7 @@ The p-value of the Ljung-Box Tests on squared log returns is very small (numeric
 
 The ADF tests reject the unit-root null for time series of all four indices, so the stationarity condition is satisfied for GARCH modeling.
 
-| index | ADF Statistic | p-value | lags used | observations | 1% critical value | 5% critical value | 10% critical value |
+| index | ADF | p-value | lags | obs | 1% crit | 5% crit | 10% crit |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | ^FTSE | -28.0801 | 0 | 5 | 4370 | -3.4318 | -2.8622 | -2.5671 |
 | ^GSPC | -15.6464 | 1.617e-28 | 17 | 4358 | -3.4319 | -2.8622 | -2.5671 |
@@ -101,65 +105,63 @@ The ADF tests reject the unit-root null for time series of all four indices, so 
 
 The ARCH LM tests show very strong evidence of ARCH effects in all four return series after fitting an AR(1) mean model. This suggests that a GARCH-type model is appropriate for modeling these series.
 
-| index | mean_model | nlags | lm_stat | lm_pvalue | f_stat | f_pvalue |
-| --- | --- | --- | --- | --- | --- | --- |
-| ^FTSE | AR(1) | 10 | 961.7744 | 3.198e-200 | 123.0391 | 1.086e-226 |
-| ^GSPC | AR(1) | 10 | 1235 | 4.179e-259 | 171.7683 | 2.33e-305 |
-| ^N225 | AR(1) | 10 | 785.6011 | 2.569e-162 | 95.5562 | 2.518e-179 |
-| ^STOXX50E | AR(1) | 10 | 675.4491 | 1.168e-138 | 79.7057 | 6.234e-151 |
+| index | lags | LM stat | LM p | F stat | F p |
+| --- | --- | --- | --- | --- | --- |
+| ^FTSE | 10 | 961.7744 | 3.198e-200 | 123.0391 | 1.086e-226 |
+| ^GSPC | 10 | 1235 | 4.179e-259 | 171.7683 | 2.33e-305 |
+| ^N225 | 10 | 785.6011 | 2.569e-162 | 95.5562 | 2.518e-179 |
+| ^STOXX50E | 10 | 675.4491 | 1.168e-138 | 79.7057 | 6.234e-151 |
 
 ## 5. Model Specification
 
-$$
-\begin{aligned}
-r_t &= \mu + \phi r_{t-1} + \varepsilon_t, \\
-\varepsilon_t &= \sigma_t z_t, \\
-\sigma_t^2 &= \omega + \alpha \varepsilon_{t-1}^{2} + \beta \sigma_{t-1}^{2}, \\
-z_t &\sim t_\nu.
-\end{aligned}
-$$
+The fitted model is specified as:
+
+- Mean equation: $r_t = \mu + \phi r_{t-1} + \varepsilon_t$
+- Shock decomposition: $\varepsilon_t = \sigma_t z_t$
+- Variance equation: $\sigma_t^2 = \omega + \alpha \varepsilon_{t-1}^{2} + \beta \sigma_{t-1}^{2}$
+- Innovation distribution: $z_t \sim t_\nu$
 
 ## 6. Estimation Results
 
 ### 6.1 Model Fit
 
-| index | model | log_likelihood | AIC | BIC |
-| --- | --- | --- | --- | --- |
-| ^FTSE | AR(1)-GARCH(1,1)-t | -5909 | 1.183e+04 | 1.187e+04 |
-| ^GSPC | AR(1)-GARCH(1,1)-t | -6017 | 1.205e+04 | 1.208e+04 |
-| ^N225 | AR(1)-GARCH(1,1)-t | -7392 | 1.48e+04 | 1.483e+04 |
-| ^STOXX50E | AR(1)-GARCH(1,1)-t | -6939 | 1.389e+04 | 1.393e+04 |
+| index | log_likelihood | AIC | BIC |
+| --- | --- | --- | --- |
+| ^FTSE | -5909 | 1.183e+04 | 1.187e+04 |
+| ^GSPC | -6017 | 1.205e+04 | 1.208e+04 |
+| ^N225 | -7392 | 1.48e+04 | 1.483e+04 |
+| ^STOXX50E | -6939 | 1.389e+04 | 1.393e+04 |
 
 ### 6.2 Parameter Estimates
 
 For all four indices, the AR(1)-GARCH(1, 1) model shows highly significant volatility clustering with persistent GARCH effects and fat-tailed return shocks.
 
-| index | model | parameter | estimate | std_error | t_stat | p_value |
-| --- | --- | --- | --- | --- | --- | --- |
-| ^FTSE | AR(1)-GARCH(1,1)-t | Const | 0.0521 | 0.0118 | 4.4105 | 1.031e-05 |
-| ^FTSE | AR(1)-GARCH(1,1)-t | ^FTSE[1] | -0.0056 | 0.0154 | -0.3646 | 0.7154 |
-| ^FTSE | AR(1)-GARCH(1,1)-t | omega | 0.0311 | 0.0071 | 4.3921 | 1.123e-05 |
-| ^FTSE | AR(1)-GARCH(1,1)-t | alpha[1] | 0.1311 | 0.0192 | 6.8379 | 8.037e-12 |
-| ^FTSE | AR(1)-GARCH(1,1)-t | beta[1] | 0.8485 | 0.021 | 40.459 | 0 |
-| ^FTSE | AR(1)-GARCH(1,1)-t | nu | 5.8568 | 0.5162 | 11.3469 | 7.686e-30 |
-| ^GSPC | AR(1)-GARCH(1,1)-t | Const | 0.1104 | 0.0113 | 9.7755 | 1.435e-22 |
-| ^GSPC | AR(1)-GARCH(1,1)-t | ^GSPC[1] | -0.0575 | 0.0147 | -3.9107 | 9.202e-05 |
-| ^GSPC | AR(1)-GARCH(1,1)-t | omega | 0.021 | 0.0047 | 4.5121 | 6.42e-06 |
-| ^GSPC | AR(1)-GARCH(1,1)-t | alpha[1] | 0.1471 | 0.0151 | 9.7149 | 2.604e-22 |
-| ^GSPC | AR(1)-GARCH(1,1)-t | beta[1] | 0.8522 | 0.0132 | 64.4541 | 0 |
-| ^GSPC | AR(1)-GARCH(1,1)-t | nu | 4.9918 | 0.3798 | 13.1448 | 1.823e-39 |
-| ^N225 | AR(1)-GARCH(1,1)-t | Const | 0.0834 | 0.0174 | 4.8091 | 1.516e-06 |
-| ^N225 | AR(1)-GARCH(1,1)-t | ^N225[1] | -0.0392 | 0.0155 | -2.5382 | 0.0111 |
-| ^N225 | AR(1)-GARCH(1,1)-t | omega | 0.0645 | 0.0169 | 3.819 | 0.000134 |
-| ^N225 | AR(1)-GARCH(1,1)-t | alpha[1] | 0.1144 | 0.0184 | 6.2288 | 4.7e-10 |
-| ^N225 | AR(1)-GARCH(1,1)-t | beta[1] | 0.8597 | 0.022 | 39.0374 | 0 |
-| ^N225 | AR(1)-GARCH(1,1)-t | nu | 6.5603 | 0.6572 | 9.9818 | 1.831e-23 |
-| ^STOXX50E | AR(1)-GARCH(1,1)-t | Const | 0.0762 | 0.0153 | 4.9783 | 6.416e-07 |
-| ^STOXX50E | AR(1)-GARCH(1,1)-t | ^STOXX50E[1] | -0.0331 | 0.0149 | -2.2292 | 0.0258 |
-| ^STOXX50E | AR(1)-GARCH(1,1)-t | omega | 0.0353 | 0.0103 | 3.4067 | 0.0006576 |
-| ^STOXX50E | AR(1)-GARCH(1,1)-t | alpha[1] | 0.1098 | 0.0192 | 5.7258 | 1.03e-08 |
-| ^STOXX50E | AR(1)-GARCH(1,1)-t | beta[1] | 0.8781 | 0.0206 | 42.5703 | 0 |
-| ^STOXX50E | AR(1)-GARCH(1,1)-t | nu | 5.3101 | 0.4259 | 12.4685 | 1.109e-35 |
+| index | parameter | estimate | std_error | t_stat | p_value |
+| --- | --- | --- | --- | --- | --- |
+| ^FTSE | Const | 0.0521 | 0.0118 | 4.4105 | 1.031e-05 |
+| ^FTSE | ^FTSE[1] | -0.0056 | 0.0154 | -0.3646 | 0.7154 |
+| ^FTSE | omega | 0.0311 | 0.0071 | 4.3921 | 1.123e-05 |
+| ^FTSE | alpha[1] | 0.1311 | 0.0192 | 6.8379 | 8.037e-12 |
+| ^FTSE | beta[1] | 0.8485 | 0.021 | 40.459 | 0 |
+| ^FTSE | nu | 5.8568 | 0.5162 | 11.3469 | 7.686e-30 |
+| ^GSPC | Const | 0.1104 | 0.0113 | 9.7755 | 1.435e-22 |
+| ^GSPC | ^GSPC[1] | -0.0575 | 0.0147 | -3.9107 | 9.202e-05 |
+| ^GSPC | omega | 0.021 | 0.0047 | 4.5121 | 6.42e-06 |
+| ^GSPC | alpha[1] | 0.1471 | 0.0151 | 9.7149 | 2.604e-22 |
+| ^GSPC | beta[1] | 0.8522 | 0.0132 | 64.4541 | 0 |
+| ^GSPC | nu | 4.9918 | 0.3798 | 13.1448 | 1.823e-39 |
+| ^N225 | Const | 0.0834 | 0.0174 | 4.8091 | 1.516e-06 |
+| ^N225 | ^N225[1] | -0.0392 | 0.0155 | -2.5382 | 0.0111 |
+| ^N225 | omega | 0.0645 | 0.0169 | 3.819 | 0.000134 |
+| ^N225 | alpha[1] | 0.1144 | 0.0184 | 6.2288 | 4.7e-10 |
+| ^N225 | beta[1] | 0.8597 | 0.022 | 39.0374 | 0 |
+| ^N225 | nu | 6.5603 | 0.6572 | 9.9818 | 1.831e-23 |
+| ^STOXX50E | Const | 0.0762 | 0.0153 | 4.9783 | 6.416e-07 |
+| ^STOXX50E | ^STOXX50E[1] | -0.0331 | 0.0149 | -2.2292 | 0.0258 |
+| ^STOXX50E | omega | 0.0353 | 0.0103 | 3.4067 | 0.0006576 |
+| ^STOXX50E | alpha[1] | 0.1098 | 0.0192 | 5.7258 | 1.03e-08 |
+| ^STOXX50E | beta[1] | 0.8781 | 0.0206 | 42.5703 | 0 |
+| ^STOXX50E | nu | 5.3101 | 0.4259 | 12.4685 | 1.109e-35 |
 
 ### 6.3 Volatility Persistence
 
@@ -172,30 +174,53 @@ The large values of alpha[1] + beta[1] suggest high volatility persistence acros
 | ^FTSE | 0.0311 | 0.1311 | 0.8485 | 0.9795 |
 | ^N225 | 0.0645 | 0.1144 | 0.8597 | 0.974 |
 
+### 6.4 Model Comparison
+
+As a robustness check, I compare the baseline AR(1)-GARCH(1,1)-t model with an AR(1)-GARCH(2,2)-t model. The higher-order model improves the AIC only for the S&P 500, while the BIC is higher for all four indices. Additionally, the p-values of the Ljung-Box tests do not materially improve for the AR(1)-GARCH(2,2) model. Thus, the increased model complexity is not justified, and I proceed with the AR(1)-GARCH(1,1) model.
+
+#### Fit Criteria
+
+| index | AIC (1,1) | BIC (1,1) | AIC (2,2) | BIC (2,2) | dAIC | dBIC |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| ^FTSE | 11830.08 | 11868.38 | 11834.03 | 11885.10 | 3.95 | 16.72 |
+| ^GSPC | 12045.97 | 12084.27 | 12040.95 | 12092.02 | -5.02 | 7.75 |
+| ^N225 | 14796.10 | 14834.40 | 14799.74 | 14850.81 | 3.64 | 16.41 |
+| ^STOXX50E | 13889.11 | 13927.41 | 13892.38 | 13943.45 | 3.27 | 16.04 |
+
+#### Ljung-Box Diagnostic P-Values (Lag 20)
+
+| index | z p-value (1,1) | z p-value (2,2) | z^2 p (1,1) | z^2 p (2,2) |
+| --- | ---: | ---: | ---: | ---: |
+| ^FTSE | 0.2552 | 0.251 | 0.6067 | 0.5858 |
+| ^GSPC | 0.0499 | 0.04465 | 0.9214 | 0.8204 |
+| ^N225 | 0.7749 | 0.7675 | 0.001237 | 0.002578 |
+| ^STOXX50E | 0.2864 | 0.2769 | 0.4326 | 0.4814 |
+
 ## 7. Model Diagnostics
 
 The Ljung-Box tests show that the AR(1)-GARCH(1, 1) model has sufficiently removed autocorrelation in the standardized residuals across four indices. For squared standardized residuals, the model performs well in removing autocorrelation in ^FTSE and ^STOXX50E, but it does not fully capture volatility clustering for ^GSPC and ^N225.
 
-| index | model | test | lag | stat | p_value |
-| --- | --- | --- | --- | --- | --- |
-| ^FTSE | AR(1)-GARCH(1,1)-t | lb_std_resid | 10 | 12.9257 | 0.2279 |
-| ^FTSE | AR(1)-GARCH(1,1)-t | lb_std_resid | 20 | 23.713 | 0.2552 |
-| ^FTSE | AR(1)-GARCH(1,1)-t | lb_std_resid_squared | 10 | 8.4607 | 0.5839 |
-| ^FTSE | AR(1)-GARCH(1,1)-t | lb_std_resid_squared | 20 | 17.7075 | 0.6067 |
-| ^GSPC | AR(1)-GARCH(1,1)-t | lb_std_resid | 10 | 14.275 | 0.1608 |
-| ^GSPC | AR(1)-GARCH(1,1)-t | lb_std_resid | 20 | 31.4188 | 0.0499 |
-| ^GSPC | AR(1)-GARCH(1,1)-t | lb_std_resid_squared | 10 | 5.6836 | 0.8411 |
-| ^GSPC | AR(1)-GARCH(1,1)-t | lb_std_resid_squared | 20 | 11.8408 | 0.9214 |
-| ^N225 | AR(1)-GARCH(1,1)-t | lb_std_resid | 10 | 8.6317 | 0.5674 |
-| ^N225 | AR(1)-GARCH(1,1)-t | lb_std_resid | 20 | 15.027 | 0.7749 |
-| ^N225 | AR(1)-GARCH(1,1)-t | lb_std_resid_squared | 10 | 30.0278 | 0.0008477 |
-| ^N225 | AR(1)-GARCH(1,1)-t | lb_std_resid_squared | 20 | 44.6328 | 0.0012 |
-| ^STOXX50E | AR(1)-GARCH(1,1)-t | lb_std_resid | 10 | 8.4025 | 0.5896 |
-| ^STOXX50E | AR(1)-GARCH(1,1)-t | lb_std_resid | 20 | 23.0496 | 0.2864 |
-| ^STOXX50E | AR(1)-GARCH(1,1)-t | lb_std_resid_squared | 10 | 5.9099 | 0.8228 |
-| ^STOXX50E | AR(1)-GARCH(1,1)-t | lb_std_resid_squared | 20 | 20.41 | 0.4326 |
+| index | test | lag | stat | p_value |
+| --- | --- | --- | --- | --- |
+| ^FTSE | lb_std_resid | 10 | 12.9257 | 0.2279 |
+| ^FTSE | lb_std_resid | 20 | 23.713 | 0.2552 |
+| ^FTSE | lb_std_resid_squared | 10 | 8.4607 | 0.5839 |
+| ^FTSE | lb_std_resid_squared | 20 | 17.7075 | 0.6067 |
+| ^GSPC | lb_std_resid | 10 | 14.275 | 0.1608 |
+| ^GSPC | lb_std_resid | 20 | 31.4188 | 0.0499 |
+| ^GSPC | lb_std_resid_squared | 10 | 5.6836 | 0.8411 |
+| ^GSPC | lb_std_resid_squared | 20 | 11.8408 | 0.9214 |
+| ^N225 | lb_std_resid | 10 | 8.6317 | 0.5674 |
+| ^N225 | lb_std_resid | 20 | 15.027 | 0.7749 |
+| ^N225 | lb_std_resid_squared | 10 | 30.0278 | 0.0008477 |
+| ^N225 | lb_std_resid_squared | 20 | 44.6328 | 0.0012 |
+| ^STOXX50E | lb_std_resid | 10 | 8.4025 | 0.5896 |
+| ^STOXX50E | lb_std_resid | 20 | 23.0496 | 0.2864 |
+| ^STOXX50E | lb_std_resid_squared | 10 | 5.9099 | 0.8228 |
+| ^STOXX50E | lb_std_resid_squared | 20 | 20.41 | 0.4326 |
 
-The following ACF/PACF plots show the autocorrelation structure of the standardized residuals and squared standardized residuals from the fitted AR(1)-GARCH(1,1)-t models. As most autocorrelations lie within the confidence bands after lag 0, the models appear to fit relatively well.
+The following ACF/PACF plots show the autocorrelation structure of the standardized residuals and squared standardized residuals from the fitted AR(1)-GARCH(1,1)-t models. As most autocorrelations lie within the confidence bands after lag 0, the models appear to fit relatively well, although some remaining dependence is still visible for certain squared standardized residual series.
+
 ![FTSE 100 residual diagnostics](outputs/plots/^FTSE_garch_residual_acf_pacf.png)
 
 ![S&P 500 residual diagnostics](outputs/plots/^GSPC_garch_residual_acf_pacf.png)
@@ -218,12 +243,12 @@ The following ACF/PACF plots show the autocorrelation structure of the standardi
 
 ### 8.2 Forecasts
 
-| index | model | h | forecast_mean | forecast_variance | forecast_volatility | annualized_forecast_volatility |
-| --- | --- | --- | --- | --- | --- | --- |
-| ^FTSE | AR(1)-GARCH(1,1)-t | 21 | 0.0518 | 0.8398 | 0.9164 | 14.5478 |
-| ^GSPC | AR(1)-GARCH(1,1)-t | 21 | 0.1044 | 0.8293 | 0.9106 | 14.4561 |
-| ^N225 | AR(1)-GARCH(1,1)-t | 21 | 0.0803 | 3.1675 | 1.7797 | 28.2525 |
-| ^STOXX50E | AR(1)-GARCH(1,1)-t | 21 | 0.0738 | 1.3499 | 1.1619 | 18.4439 |
+| index | h | mean | variance | volatility | ann_volatility |
+| --- | --- | --- | --- | --- | --- |
+| ^FTSE | 21 | 0.0518 | 0.8398 | 0.9164 | 14.5478 |
+| ^GSPC | 21 | 0.1044 | 0.8293 | 0.9106 | 14.4561 |
+| ^N225 | 21 | 0.0803 | 3.1675 | 1.7797 | 28.2525 |
+| ^STOXX50E | 21 | 0.0738 | 1.3499 | 1.1619 | 18.4439 |
 
 ![FTSE 100 volatility forecast](outputs/plots/^FTSE_volatility_forecast_plot.png)
 
@@ -237,12 +262,12 @@ The following ACF/PACF plots show the autocorrelation structure of the standardi
 
 The 99% VaR backtesting using an 80%-20% train-test data split shows that the model's VaR forecasts are broadly well-calibrated for all four indices. However, ^GSPC has the most exceedances and is the closest to potential underestimation of tail risk.
 
-| index | model | var_level | observations | exceedances | expected_exceedances | exceedance_rate | kupiec_lr | kupiec_pvalue |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ^FTSE | AR(1)-GARCH(1,1)-t | 99% | 875 | 10 | 8.75 | 0.0114 | 0.1724 | 0.678 |
-| ^GSPC | AR(1)-GARCH(1,1)-t | 99% | 875 | 14 | 8.75 | 0.016 | 2.692 | 0.1009 |
-| ^N225 | AR(1)-GARCH(1,1)-t | 99% | 875 | 9 | 8.75 | 0.0103 | 0.0071 | 0.9326 |
-| ^STOXX50E | AR(1)-GARCH(1,1)-t | 99% | 875 | 11 | 8.75 | 0.0126 | 0.5404 | 0.4623 |
+| index | var_level | obs | exceedances | expected | rate | kupiec_lr | kupiec_p |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| ^FTSE | 99% | 875 | 10 | 8.75 | 0.0114 | 0.1724 | 0.678 |
+| ^GSPC | 99% | 875 | 14 | 8.75 | 0.016 | 2.692 | 0.1009 |
+| ^N225 | 99% | 875 | 9 | 8.75 | 0.0103 | 0.0071 | 0.9326 |
+| ^STOXX50E | 99% | 875 | 11 | 8.75 | 0.0126 | 0.5404 | 0.4623 |
 
 ![FTSE 100 VaR backtest](outputs/plots/^FTSE_var_backtest_plot.png)
 
@@ -254,4 +279,4 @@ The 99% VaR backtesting using an 80%-20% train-test data split shows that the mo
 
 ## 10. Limitations
 
-One limitation of the project is that the AR(1)-GARCH(1, 1) model does not fully remove the autocorrelation of the squared standardized residuals for ^GSPC and ^N225. To address this, future projects could compare richer volatility models such as GJR-GARCH, EGARCH, or higher-order GARCH specifications. Another limitation is that each index is modeled separately, so the analysis does not capture cross-market dependence or spillover effects across global equity markets. 
+One limitation of the project is that the AR(1)-GARCH(1, 1) model does not fully remove the autocorrelation of the squared standardized residuals for ^GSPC and ^N225. To address this, future projects could compare richer volatility models such as GJR-GARCH, EGARCH, or higher-order GARCH specifications. Another limitation is that each index is modeled separately, so the analysis does not capture cross-market dependence or spillover effects across global equity markets.
